@@ -34,36 +34,53 @@ export default function App() {
       return;
     }
 
+    if (enviando) return;
+
     setEnviando(true);
 
     const mensagem = `Olá, já realizei o pagamento via PIX.
 
 Nome: ${nome}
 Tipo: ${tipo}
-Data: ${fecha.toLocaleDateString()}
+Data: ${fecha.toLocaleDateString("pt-BR")}
 Hora: ${hora}
 
 Estou enviando o comprovante agora.`;
 
     const urlWhatsApp = `https://wa.me/${telefone}?text=${encodeURIComponent(mensagem)}`;
 
+    // Abre una pestaña inmediatamente para evitar bloqueo del navegador
+    const whatsappWindow = window.open("", "_blank");
+
     try {
-      await addDoc(collection(db, "citas"), {
+      // Timeout de seguridad: no esperar Firebase para siempre
+      const salvarNoFirebase = addDoc(collection(db, "citas"), {
         nome,
         tipo,
-        fecha: fecha.toLocaleDateString(),
+        fecha: fecha.toLocaleDateString("pt-BR"),
         hora,
         createdAt: new Date().toISOString()
       });
 
-      // Redirección directa: más confiable que window.open en producción
-      window.location.href = urlWhatsApp;
-    } catch (error) {
-      console.error("Erro ao salvar no Firebase:", error);
+      const timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Timeout ao salvar no Firebase")), 8000)
+      );
 
-      // Igual permite abrir WhatsApp aunque Firebase falle
-      alert("Não foi possível salvar no Firebase, mas você será redirecionado ao WhatsApp.");
-      window.location.href = urlWhatsApp;
+      await Promise.race([salvarNoFirebase, timeout]);
+
+      if (whatsappWindow) {
+        whatsappWindow.location.href = urlWhatsApp;
+      } else {
+        window.location.href = urlWhatsApp;
+      }
+    } catch (error) {
+      console.error("Erro ao salvar/agendar:", error);
+
+      if (whatsappWindow) {
+        whatsappWindow.location.href = urlWhatsApp;
+      } else {
+        window.location.href = urlWhatsApp;
+      }
     } finally {
       setEnviando(false);
     }
@@ -77,7 +94,8 @@ Estou enviando o comprovante agora.`;
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
-        fontFamily: "Arial"
+        fontFamily: "Arial",
+        padding: "20px"
       }}
     >
       <div
@@ -85,7 +103,8 @@ Estou enviando o comprovante agora.`;
           background: "#ffffff",
           padding: "30px",
           borderRadius: "15px",
-          width: "350px",
+          width: "100%",
+          maxWidth: "380px",
           boxShadow: "0 10px 30px rgba(0,0,0,0.1)",
           textAlign: "center"
         }}
@@ -141,7 +160,8 @@ Estou enviando o comprovante agora.`;
             onChange={(date) => setFecha(date)}
             minDate={new Date()}
             dateFormat="dd/MM/yyyy"
-            className="input"
+            placeholderText="Escolha a data"
+            style={{ width: "100%" }}
           />
         </div>
 
@@ -174,9 +194,15 @@ Estou enviando o comprovante agora.`;
               marginTop: "10px"
             }}
           >
-            <h3 style={{ marginBottom: "10px" }}>Pagamento via PIX</h3>
-            <p style={{ fontSize: "14px" }}>Chave: sefirxd18@gmail.com</p>
-            <p style={{ fontWeight: "bold", marginBottom: "10px" }}>
+            <h3 style={{ marginBottom: "10px", color: "#000" }}>
+              Pagamento via PIX
+            </h3>
+
+            <p style={{ fontSize: "14px", color: "#333" }}>
+              Chave PIX: sefirxd18@gmail.com
+            </p>
+
+            <p style={{ fontWeight: "bold", marginBottom: "10px", color: "#000" }}>
               Valor: R$ {precos[tipo]}
             </p>
 
@@ -188,7 +214,7 @@ Estou enviando o comprovante agora.`;
                 padding: "12px",
                 border: "none",
                 borderRadius: "8px",
-                background: enviando ? "#666" : "#000",
+                background: enviando ? "#777" : "#000",
                 color: "#fff",
                 fontWeight: "bold",
                 cursor: enviando ? "not-allowed" : "pointer"
