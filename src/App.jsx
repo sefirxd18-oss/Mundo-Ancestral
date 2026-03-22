@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 
 import { db } from "./firebase";
-import { collection, addDoc } from "firebase/firestore";
+import { collection, addDoc, getDocs, query, where } from "firebase/firestore";
 
 export default function App() {
   const [nome, setNome] = useState("");
@@ -11,12 +11,13 @@ export default function App() {
   const [fecha, setFecha] = useState(new Date());
   const [hora, setHora] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [horariosOcupados, setHorariosOcupados] = useState([]);
 
   const telefone = "5519999692649";
 
   const precos = {
     presencial: 600,
-    online: 300
+    online: 300,
   };
 
   const horarios = [
@@ -25,12 +26,43 @@ export default function App() {
     "11:00",
     "14:00",
     "15:00",
-    "16:00"
+    "16:00",
   ];
+
+  const fechaFormateada = fecha.toLocaleDateString("pt-BR");
+
+  useEffect(() => {
+    const cargarHorariosOcupados = async () => {
+      try {
+        const q = query(
+          collection(db, "citas"),
+          where("fecha", "==", fecha.toLocaleDateString("pt-BR"))
+        );
+
+        const querySnapshot = await getDocs(q);
+        const ocupados = querySnapshot.docs.map((doc) => doc.data().hora);
+
+        setHorariosOcupados(ocupados);
+
+        if (ocupados.includes(hora)) {
+          setHora("");
+        }
+      } catch (error) {
+        console.error("Erro ao buscar horários ocupados:", error);
+      }
+    };
+
+    cargarHorariosOcupados();
+  }, [fecha]);
 
   const enviarWhatsApp = async () => {
     if (!nome || !tipo || !hora) {
       alert("Preencha todos os campos");
+      return;
+    }
+
+    if (horariosOcupados.includes(hora)) {
+      alert("Este horário já foi reservado. Escolha outro.");
       return;
     }
 
@@ -42,42 +74,34 @@ export default function App() {
 
 Nome: ${nome}
 Tipo: ${tipo}
-Data: ${fecha.toLocaleDateString("pt-BR")}
+Data: ${fechaFormateada}
 Hora: ${hora}
 
 Estou enviando o comprovante agora.`;
 
     const urlWhatsApp = `https://wa.me/${telefone}?text=${encodeURIComponent(mensagem)}`;
-
-    // Abre una pestaña inmediatamente para evitar bloqueo del navegador
-    const whatsappWindow = window.open("", "_blank");
+    const whatsappTab = window.open("", "_blank");
 
     try {
-      // Timeout de seguridad: no esperar Firebase para siempre
-      const salvarNoFirebase = addDoc(collection(db, "citas"), {
+      await addDoc(collection(db, "citas"), {
         nome,
         tipo,
-        fecha: fecha.toLocaleDateString("pt-BR"),
+        fecha: fechaFormateada,
         hora,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
       });
 
-      const timeout = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Timeout ao salvar no Firebase")), 8000)
-      );
-
-      await Promise.race([salvarNoFirebase, timeout]);
-
-      if (whatsappWindow) {
-        whatsappWindow.location.href = urlWhatsApp;
+      if (whatsappTab) {
+        whatsappTab.location.href = urlWhatsApp;
       } else {
         window.location.href = urlWhatsApp;
       }
     } catch (error) {
-      console.error("Erro ao salvar/agendar:", error);
+      console.error("Erro ao salvar no Firebase:", error);
+      alert("Não foi possível salvar no Firebase, mas o WhatsApp será aberto.");
 
-      if (whatsappWindow) {
-        whatsappWindow.location.href = urlWhatsApp;
+      if (whatsappTab) {
+        whatsappTab.location.href = urlWhatsApp;
       } else {
         window.location.href = urlWhatsApp;
       }
@@ -85,6 +109,10 @@ Estou enviando o comprovante agora.`;
       setEnviando(false);
     }
   };
+
+  const horariosDisponiveis = horarios.filter(
+    (item) => !horariosOcupados.includes(item)
+  );
 
   return (
     <div
@@ -95,7 +123,7 @@ Estou enviando o comprovante agora.`;
         justifyContent: "center",
         alignItems: "center",
         fontFamily: "Arial",
-        padding: "20px"
+        padding: "20px",
       }}
     >
       <div
@@ -103,17 +131,16 @@ Estou enviando o comprovante agora.`;
           background: "#ffffff",
           padding: "30px",
           borderRadius: "15px",
-          width: "100%",
-          maxWidth: "380px",
+          width: "350px",
           boxShadow: "0 10px 30px rgba(0,0,0,0.1)",
-          textAlign: "center"
+          textAlign: "center",
         }}
       >
         <h1
           style={{
             fontSize: "28px",
             marginBottom: "5px",
-            color: "#000"
+            color: "#000",
           }}
         >
           Mundo Ancestral
@@ -133,7 +160,7 @@ Estou enviando o comprovante agora.`;
             marginBottom: "15px",
             borderRadius: "8px",
             border: "1px solid #ccc",
-            boxSizing: "border-box"
+            boxSizing: "border-box",
           }}
         />
 
@@ -146,7 +173,7 @@ Estou enviando o comprovante agora.`;
             marginBottom: "15px",
             borderRadius: "8px",
             border: "1px solid #ccc",
-            boxSizing: "border-box"
+            boxSizing: "border-box",
           }}
         >
           <option value="">Selecione a consulta</option>
@@ -161,7 +188,6 @@ Estou enviando o comprovante agora.`;
             minDate={new Date()}
             dateFormat="dd/MM/yyyy"
             placeholderText="Escolha a data"
-            style={{ width: "100%" }}
           />
         </div>
 
@@ -174,16 +200,22 @@ Estou enviando o comprovante agora.`;
             marginBottom: "15px",
             borderRadius: "8px",
             border: "1px solid #ccc",
-            boxSizing: "border-box"
+            boxSizing: "border-box",
           }}
         >
           <option value="">Horários disponíveis</option>
-          {horarios.map((h, i) => (
+          {horariosDisponiveis.map((h, i) => (
             <option key={i} value={h}>
               {h}
             </option>
           ))}
         </select>
+
+        {horariosDisponiveis.length === 0 && (
+          <p style={{ color: "red", fontSize: "14px", marginBottom: "15px" }}>
+            Não há horários disponíveis para esta data.
+          </p>
+        )}
 
         {tipo && hora && (
           <div
@@ -191,18 +223,12 @@ Estou enviando o comprovante agora.`;
               background: "#fafafa",
               padding: "15px",
               borderRadius: "10px",
-              marginTop: "10px"
+              marginTop: "10px",
             }}
           >
-            <h3 style={{ marginBottom: "10px", color: "#000" }}>
-              Pagamento via PIX
-            </h3>
-
-            <p style={{ fontSize: "14px", color: "#333" }}>
-              Chave PIX: sefirxd18@gmail.com
-            </p>
-
-            <p style={{ fontWeight: "bold", marginBottom: "10px", color: "#000" }}>
+            <h3 style={{ marginBottom: "10px" }}>Pagamento via PIX</h3>
+            <p style={{ fontSize: "14px" }}>Chave: sefirxd18@gmail.com</p>
+            <p style={{ fontWeight: "bold", marginBottom: "10px" }}>
               Valor: R$ {precos[tipo]}
             </p>
 
@@ -214,10 +240,10 @@ Estou enviando o comprovante agora.`;
                 padding: "12px",
                 border: "none",
                 borderRadius: "8px",
-                background: enviando ? "#777" : "#000",
+                background: enviando ? "#666" : "#000",
                 color: "#fff",
                 fontWeight: "bold",
-                cursor: enviando ? "not-allowed" : "pointer"
+                cursor: enviando ? "not-allowed" : "pointer",
               }}
             >
               {enviando ? "Enviando..." : "Enviar comprovante"}
