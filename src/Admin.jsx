@@ -6,6 +6,20 @@ export default function Admin() {
   const [agendamentos, setAgendamentos] = useState([]);
   const [carregando, setCarregando] = useState(true);
 
+  // 🔐 LOGIN
+  const [logado, setLogado] = useState(false);
+  const [senha, setSenha] = useState("");
+
+  const SENHA_CORRETA = "290280"; // 🔥 CAMBIA ESTO
+
+  const entrar = () => {
+    if (senha === SENHA_CORRETA) {
+      setLogado(true);
+    } else {
+      alert("Senha incorreta");
+    }
+  };
+
   const carregarAgendamentos = async () => {
     try {
       const q = query(collection(db, "citas"), orderBy("createdAt", "desc"));
@@ -18,108 +32,112 @@ export default function Admin() {
 
       setAgendamentos(lista);
     } catch (error) {
-      console.error("Erro ao carregar agendamentos:", error);
-      alert("Erro ao carregar agendamentos");
+      console.error("Erro ao carregar:", error);
     } finally {
       setCarregando(false);
     }
   };
 
   const excluirAgendamento = async (id) => {
-    const confirmar = window.confirm("Deseja excluir este agendamento?");
+    const confirmar = window.confirm("Excluir este agendamento?");
     if (!confirmar) return;
 
-    try {
-      await deleteDoc(doc(db, "citas", id));
-      setAgendamentos((prev) => prev.filter((item) => item.id !== id));
-    } catch (error) {
-      console.error("Erro ao excluir:", error);
-      alert("Erro ao excluir agendamento");
-    }
+    await deleteDoc(doc(db, "citas", id));
+    setAgendamentos((prev) => prev.filter((item) => item.id !== id));
   };
 
   useEffect(() => {
-    carregarAgendamentos();
-  }, []);
+    if (logado) {
+      carregarAgendamentos();
+    }
+  }, [logado]);
 
-  return (
-    <div
-      style={{
-        background: "#f5f5f5",
-        minHeight: "100vh",
-        padding: "30px",
-        fontFamily: "Arial"
-      }}
-    >
-      <div
-        style={{
-          maxWidth: "1000px",
-          margin: "0 auto",
+  // 🔐 TELA DE LOGIN
+  if (!logado) {
+    return (
+      <div style={{
+        height: "100vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        background: "#f5f5f5"
+      }}>
+        <div style={{
           background: "#fff",
-          borderRadius: "16px",
-          boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
-          padding: "24px"
-        }}
-      >
-        <h1 style={{ marginBottom: "8px", color: "#111" }}>
-          Painel Admin - Mundo Ancestral
-        </h1>
+          padding: "30px",
+          borderRadius: "12px",
+          boxShadow: "0 10px 30px rgba(0,0,0,0.1)",
+          textAlign: "center"
+        }}>
+          <h2>Painel Admin</h2>
 
-        <p style={{ color: "#666", marginBottom: "24px" }}>
-          Gerencie seus agendamentos
-        </p>
+          <input
+            type="password"
+            placeholder="Digite a senha"
+            onChange={(e) => setSenha(e.target.value)}
+            style={{
+              padding: "10px",
+              marginTop: "10px",
+              width: "100%",
+              borderRadius: "8px",
+              border: "1px solid #ccc"
+            }}
+          />
 
-        {carregando ? (
-          <p>Carregando agendamentos...</p>
-        ) : agendamentos.length === 0 ? (
-          <p>Nenhum agendamento encontrado.</p>
-        ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                textAlign: "left"
-              }}
-            >
-              <thead>
-                <tr style={{ background: "#111", color: "#fff" }}>
-                  <th style={{ padding: "12px" }}>Nome</th>
-                  <th style={{ padding: "12px" }}>Consulta</th>
-                  <th style={{ padding: "12px" }}>Data</th>
-                  <th style={{ padding: "12px" }}>Hora</th>
-                  <th style={{ padding: "12px" }}>Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {agendamentos.map((item) => (
-                  <tr key={item.id} style={{ borderBottom: "1px solid #eee" }}>
-                    <td style={{ padding: "12px" }}>{item.nome}</td>
-                    <td style={{ padding: "12px" }}>{item.tipo}</td>
-                    <td style={{ padding: "12px" }}>{item.fecha}</td>
-                    <td style={{ padding: "12px" }}>{item.hora}</td>
-                    <td style={{ padding: "12px" }}>
-                      <button
-                        onClick={() => excluirAgendamento(item.id)}
-                        style={{
-                          background: "#c62828",
-                          color: "#fff",
-                          border: "none",
-                          borderRadius: "8px",
-                          padding: "8px 12px",
-                          cursor: "pointer"
-                        }}
-                      >
-                        Excluir
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+          <button
+            onClick={entrar}
+            style={{
+              marginTop: "15px",
+              padding: "10px",
+              width: "100%",
+              background: "#000",
+              color: "#fff",
+              border: "none",
+              borderRadius: "8px"
+            }}
+          >
+            Entrar
+          </button>
+        </div>
       </div>
+    );
+  }
+
+  // 🧿 PANEL NORMAL
+  return (
+    <div style={{ padding: "20px" }}>
+      <h1>Painel Admin</h1>
+
+      {carregando ? (
+        <p>Carregando...</p>
+      ) : (
+        <table style={{ width: "100%" }}>
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Tipo</th>
+              <th>Data</th>
+              <th>Hora</th>
+              <th>Ação</th>
+            </tr>
+          </thead>
+          <tbody>
+            {agendamentos.map((item) => (
+              <tr key={item.id}>
+                <td>{item.nome}</td>
+                <td>{item.tipo}</td>
+                <td>{item.fecha}</td>
+                <td>{item.hora}</td>
+                <td>
+                  <button onClick={() => excluirAgendamento(item.id)}>
+                    Excluir
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
